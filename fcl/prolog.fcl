@@ -1,79 +1,5 @@
-#include "Offline/Filters/fcl/prolog.fcl"
-#include "Offline/Compression/fcl/prolog.fcl"
 #include "Offline/fcl/TrkCaloDt.fcl"
 BEGIN_PROLOG
-# Diagnostic modules    
-  BD : {
-	module_type : BkgDiag
-	StrawDigiMCCollection : "compressDigiMCs"
-	ComboHitCollection : "makePH"
-	StrawHitFlagCollection : "FlagBkgHits:ComboHits"
-        BackgroundHitClusterCollection:"FlagBkgHits"
-	UseFlagCollection : true
-	TimeOffsets : {
-	  inputs : [ @sequence::DigiCompression.TimeMaps ]
-	}
-  }
-  
-  TRD : {
-    module_type : TrkRecoDiag
-    StrawDigiMCCollection : "compressDigiMCs"
-    VDStepPointMCCollection : "compressDigiMCs:virtualdetector"
-    TimeOffsets : {
-      inputs : [ @sequence::DigiCompression.TimeMaps ]
-    }
-  }
-
-  SHD : {
-	module_type : StrawHitDiag
-	StrawDigiMCCollection : "compressDigiMCs"
-	ComboHitFlag : false
-	StrawHitFlagCollection : "FlagBkgHits:StrawHits"
-	TimeOffsets : {
-	  inputs : [ @sequence::DigiCompression.TimeMaps ]
-	}
-  }
-
-  TCD : {
-	module_type : TimeClusterDiag
-	StrawDigiMCCollection : "compressDigiMCs"
-	ComboHitCollection : "makePH"
-	UseFlagCollection : true
-	StrawHitFlagCollection : "FlagBkgHits:ComboHits"
-	HitSelectionBits	    : ["EnergySelection","TimeSelection","RadiusSelection"]
-	HitBackgroundBits	    : ["Background"]
-	TimeOffsets         :  { inputs : [ @sequence::DigiCompression.TimeMaps ] }
-        ClusterMVA : { MVAWeights : "Offline/TrkPatRec/test/TimeCluster.weights.xml" }
-        ClusterCaloMVA : { MVAWeights : "Offline/TrkPatRec/test/TimeClusterCalo.weights.xml" }
-	PlotTimeSpectra : false
-	VDStepPointMCCollection : "compressDigiMCs:virtualdetector"
-        T0Calculator : { CaloT0Offset : @local::TrackCaloMatching.DtOffset }
-    }
-
-  HD : {
-	module_type : HelixDiag
-	StrawDigiMCCollection : "compressDigiMCs"
-	VDStepPointMCCollection : "compressDigiMCs:virtualdetector"
-	HelixSeedCollection : "MHDeM"
-	ComboHitCollection : "makePH"
-	UseFlagCollection : true
-	StrawHitFlagCollection : "FlagBkgHits:ComboHits"
-	PlotHelices : false
-	InclusivePlotFlagBits : ["HitsOK"]
-	TimeOffsets         :  { inputs : [ @sequence::DigiCompression.TimeMaps ] }
-  }
-
-  CHD : {
-	module_type : ComboHitDiag
-	StrawDigiMCCollection : "compressDigiMCs"
-	ComboHitCollection : "makePH"
-	UseFlagCollection : true
-	StrawHitFlagCollection : "FlagBkgHits:ComboHits"
-	TimeOffsets : {
-	  inputs : [ @sequence::DigiCompression.TimeMaps ]
-	}
-  }
-
   # Track quality module
   # Example of how to add a new training through fcl
   # -- trainName is the name of the training
@@ -81,7 +7,7 @@ BEGIN_PROLOG
   #  YourNewTrkQualConfig : { trainName : "YourNewTrkQual"
   #    		       	      xmlFileName : "path/to/YourNewTrkQual.weights.xml"
   #		     	    }
-  #  TrkQualCatalog.mvaConfigs : [ @sequence::TrkQualCatalog.mvaConfigs, @local::YourNewTrkQualConfig  ] 
+  #  TrkQualCatalog.mvaConfigs : [ @sequence::TrkQualCatalog.mvaConfigs, @local::YourNewTrkQualConfig  ]
 
   TrkQual : {
   	  module_type : TrackQuality
@@ -139,13 +65,13 @@ BEGIN_PROLOG
     verbosityLevel: 1
   }
 # converts ProtonBunchIntensity object to EventWeight object
-  PBIWeight : { 
+  PBIWeight : {
     module_type : PBIWeight
     PBITag : "PBISim"
     meanPBITag : "PBISim:MeanIntensity"
   }
 #Example configuration of RMCWeightModule
-  RMCWeight : { 
+  RMCWeight : {
     module_type : RMCWeight
     kinematic_endpoint : 100
     internalConversion : 1
@@ -162,46 +88,46 @@ BEGIN_PROLOG
   genCountLogger: { module_type: GenEventCountReader }
 
 # candidate configuration for TrkAna
-  AllOpt : { fillMC : true 
+  AllOpt : { fillMC : true
 	     trkqual : "TrkQual"
-	     fillTrkQual : true 
+	     fillTrkQual : true
 	     trkpid : "TrkPID"
 	     fillTrkPID : true
 	     fillHits : true
 	     genealogyDepth : 5
   }
 
-  DeM : { input : "KFF" 
-      	  branch : "de" 
-	  suffix : "DeM" 
+  DeM : { input : "KFF"
+      	  branch : "de"
+	  suffix : "DeM"
   }
-  UeM : { input : "KFF" 
-      	  branch : "ue" 
-	  suffix : "UeM" 
+  UeM : { input : "KFF"
+      	  branch : "ue"
+	  suffix : "UeM"
   }
-  DmuM : { input : "KFF" 
-      	  branch : "dm" 
-	  suffix : "DmuM" 
+  DmuM : { input : "KFF"
+      	  branch : "dm"
+	  suffix : "DmuM"
   }
-  UmuM : { input : "KFF" 
-      	  branch : "um" 
-	  suffix : "UmuM" 
+  UmuM : { input : "KFF"
+      	  branch : "um"
+	  suffix : "UmuM"
   }
-  DeP : { input : "KFF" 
-      	  branch : "de" 
-	  suffix : "DeP" 
+  DeP : { input : "KFF"
+      	  branch : "de"
+	  suffix : "DeP"
   }
-  UeP : { input : "KFF" 
-      	  branch : "ue" 
-	  suffix : "UeP" 
+  UeP : { input : "KFF"
+      	  branch : "ue"
+	  suffix : "UeP"
   }
-  DmuP : { input : "KFF" 
-      	  branch : "dm" 
-	  suffix : "DmuP" 
+  DmuP : { input : "KFF"
+      	  branch : "dm"
+	  suffix : "DmuP"
   }
-  UmuP : { input : "KFF" 
-      	  branch : "um" 
-	  suffix : "UmuP" 
+  UmuP : { input : "KFF"
+      	  branch : "um"
+	  suffix : "UmuP"
   }
 
 
@@ -231,7 +157,7 @@ BEGIN_PROLOG
     CaloClusterMCTag : "compressRecoMCs"
     InfoMCStructHelper : {
       SimParticleCollectionTag : "compressRecoMCs"
-      TimeMaps : [ @sequence::RecoCompression.TimeMaps ]
+      TimeMaps : [ ]
       MinGoodMomFraction : 0.9
     }
   }
@@ -253,7 +179,7 @@ BEGIN_PROLOG
    }
 
    analyzers : {
-      TrkAnaNeg : { @table::TrkAnaTreeMaker 
+      TrkAnaNeg : { @table::TrkAnaTreeMaker
       		    candidate : @local::DeM
 		    supplements : [ @local::UeM, @local::DmuM ]
 		  }
