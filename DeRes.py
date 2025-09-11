@@ -10,6 +10,8 @@ import numpy as np
 from scipy.optimize import curve_fit
 import math
 from scipy import special
+from scipy.stats import norm
+from scipy.stats import uniform
 import SurfaceIds as SID
 import MyHist
 import h5py
@@ -18,6 +20,9 @@ from scipy.stats import crystalball
 def fxn_CrystalBall(x, amp, beta, m, loc, scale):
     pars = np.array([beta, m, loc, scale])
     return amp*crystalball.pdf(x,*pars)
+
+def fxn_Gauss(x, amp, mean, sigma) :
+    return amp*norm.pdf(x,loc=mean,scale=sigma)
 
 def TargetFoil(tgtz):
     tgtz0 = -4300. # target center in detector coordinates
@@ -28,6 +33,24 @@ def TargetFoil(tgtz):
     itgt = int(round(tgtnum))
     return itgt
 
+def fxn_wallpath(d):
+    ri=2.5
+    ri2 = ri*ri
+    ro=2.515
+    ro2 = ro*ro
+    d2 = np.square(d)
+    od2 = np.maximum(0.0,ro2-d2)
+    id2 = np.maximum(0.0,ri2-d2)
+    p = 2.0*np.where(np.less(d,ri),np.sqrt(od2) - np.sqrt(id2), np.sqrt(od2))
+    return p
+
+def fxn_gaspath(d):
+    ri=2.5
+    ri2 = ri*ri
+    d2 = np.square(d)
+    id2 = np.maximum(0.0,ri2-d2)
+    p = 2.0*np.sqrt(id2)
+    return p
 
 class DeRes(object):
     def __init__(self,momrange,costrange,minNActive,minFitCon,minTrkQual):
@@ -141,14 +164,6 @@ class DeRes(object):
         self.HFitCon = MyHist.MyHist(name="FitCon",bins=100,range=[0.0,1.0],label="FitCon",title="Fit Consistency",xlabel="")
         cnbins = 150
         crange = [0.5,cnbins+0.5]
-        self.HNH = MyHist.MyHist(name="Count",bins=cnbins,range=crange,label="Hits",title="Fit Count",xlabel="Count")
-        self.HNHA = MyHist.MyHist(name="Count",bins=cnbins,range=crange,label="Active Hits",title="Fit Count",xlabel="Count")
-        self.HNS = MyHist.MyHist(name="Count",bins=cnbins,range=crange,label="Straws",title="Fit Count",xlabel="Count")
-        self.HNSA = MyHist.MyHist(name="Count",bins=cnbins,range=crange,label="Active Straws",title="Fit Count",xlabel="Count")
-        self.HNMC = MyHist.MyHist(name="Count",bins=cnbins,range=crange,label="MC True Hits",title="Fit Count",xlabel="Count")
-
-        self.HSDOCA = MyHist.MyHist(name="SDOCA",bins=100,range=[0.0,5.0],label="All",title="Straw DOCA",xlabel="DOCA (mm)")
-        self.HSADOCA = MyHist.MyHist(name="SDOCA",bins=100,range=[0.0,5.0],label="Active",title="Straw DOCA",xlabel="DOCA (mm)")
         # legacy variables
 #        for isid in range(len(self.TrackerSIDs)):
 #            loc = "@"+SID.SurfaceName(self.TrackerSIDs[isid])
@@ -190,6 +205,48 @@ class DeRes(object):
         self.HCosTnf = MyHist.MyHist(name="CosT",bins=50,range=costrange,label="N$_{ST Foil}$>0 & N$_{OPA}$==0",title="Cos($\\Theta$)@TT_Front",xlabel="P$_{z}$/P")
         self.HCosTnc = MyHist.MyHist(name="CosT",bins=50,range=costrange,label="N$_{ST Cyl.}$>0 & N$_{OPA}$==0",title="Cos($\\Theta$)@TT_Front",xlabel="P$_{z}$/P")
 
+    # Straw Material hists
+        self.HNH = MyHist.MyHist(name="Count",bins=cnbins,range=crange,label="Hits",title="Fit Count",xlabel="Count")
+        self.HNHA = MyHist.MyHist(name="Count",bins=cnbins,range=crange,label="Active Hits",title="Fit Count",xlabel="Count")
+        self.HNS = MyHist.MyHist(name="Count",bins=cnbins,range=crange,label="Straws",title="Fit Count",xlabel="Count")
+        self.HNSA = MyHist.MyHist(name="Count",bins=cnbins,range=crange,label="Active Straws",title="Fit Count",xlabel="Count")
+        self.HNMC = MyHist.MyHist(name="Count",bins=cnbins,range=crange,label="MC True Hits",title="Fit Count",xlabel="Count")
+
+        self.HSDOCA = MyHist.MyHist(name="SDOCA",bins=100,range=[0.0,5.0],label="All",title="Straw DOCA",xlabel="DOCA (mm)")
+        self.HSDOCAA = MyHist.MyHist(name="SDOCA",bins=100,range=[0.0,5.0],label="Active",title="Straw DOCA",xlabel="DOCA (mm)")
+        self.HSDOCAH = MyHist.MyHist(name="SDOCA",bins=100,range=[0.0,5.0],label="No Hit",title="Straw DOCA",xlabel="DOCA (mm)")
+        self.HSDOCADH = MyHist.MyHist(name="SDOCA",bins=100,range=[0.0,5.0],label="Drift Hit",title="Straw DOCA",xlabel="DOCA (mm)")
+        self.HSDOCAE = MyHist.MyHist(name="SDOCA",bins=100,range=[0.0,5.0],label="Range",title="Straw DOCA",xlabel="DOCA (mm)")
+        self.HSDOCAAv = MyHist.MyHist(name="SDOCA",bins=100,range=[0.0,5.0],label="Average",title="Straw DOCA",xlabel="DOCA (mm)")
+
+        self.HSDOCAS = MyHist.MyHist(name="SDOCAS",bins=100,range=[0.0,0.5],label="All",title="Straw DOCA Sigma",xlabel="DOCA $\\sigma$ (mm)")
+        self.HSDOCASA = MyHist.MyHist(name="SDOCAS",bins=100,range=[0.0,0.5],label="Active",title="Straw DOCA Sigma",xlabel="DOCA $\\sigma$ (mm)")
+        self.HSDOCASH = MyHist.MyHist(name="SDOCAS",bins=100,range=[0.0,0.5],label="No Hit",title="Straw DOCA Sigma",xlabel="DOCA $\\sigma$ (mm)")
+        self.HSDOCASDH = MyHist.MyHist(name="SDOCAS",bins=100,range=[0.0,0.5],label="Drift Hit",title="Straw DOCA Sigma",xlabel="DOCA $\\sigma$ (mm)")
+        self.HSDOCASE = MyHist.MyHist(name="SDOCAS",bins=100,range=[0.0,0.5],label="Range",title="Straw DOCA Sigma",xlabel="DOCA $\\sigma$ (mm)")
+        self.HSDOCASAv = MyHist.MyHist(name="SDOCAS",bins=100,range=[0.0,0.5],label="Average",title="Straw DOCA Sigma",xlabel="DOCA $\\sigma$ (mm)")
+
+        self.HSGPath = MyHist.MyHist(name="SGPath",bins=100,range=[0.0,10.0],label="All",title="Straw Gas Path",xlabel="Pathlength (mm)")
+        self.HSGPathA = MyHist.MyHist(name="SGPath",bins=100,range=[0.0,10.0],label="Active",title="Straw Gas Path",xlabel="Pathlength (mm)")
+        self.HSGPathT = MyHist.MyHist(name="SGPath",bins=100,range=[0.0,10.0],label="Transverse",title="Straw Gas Path",xlabel="Pathlength (mm)")
+        self.HSGPathM = MyHist.MyHist(name="SGPath",bins=100,range=[0.0,10.0],label="Model",title="Straw Gas Path",xlabel="Pathlength (mm)")
+
+        self.HSWPath = MyHist.MyHist(name="SWPath",bins=100,range=[0.0,0.6],label="All",title="Straw Wall Path",xlabel="Pathlength (mm)")
+        self.HSWPathA = MyHist.MyHist(name="SWPath",bins=100,range=[0.0,0.6],label="Active",title="Straw Wall Path",xlabel="Pathlength (mm)")
+        self.HSWPathT = MyHist.MyHist(name="SWPath",bins=100,range=[0.0,0.6],label="Transverse",title="Straw Wall Path",xlabel="Pathlength (mm)")
+        self.HSWPathM = MyHist.MyHist(name="SWPath",bins=100,range=[0.0,0.6],label="Model",title="Straw Wall Path",xlabel="Pathlength (mm)")
+
+        self.HSRL = MyHist.MyHist(name="SRL",bins=100,range=[0.0,2.5e-3],label="All",title="Straw Rad Len",xlabel="x/$X_{0}$")
+        self.HSRLA = MyHist.MyHist(name="SRL",bins=100,range=[0.0,2.5e-3],label="Active",title="Straw Rad Len",xlabel="x/$X_{0}$")
+
+        self.HSDE = MyHist.MyHist(name="SDP",bins=100,range=[-0.2,0.0],label="All",title="Straw Energy Loss",xlabel="$\\Delta$E (MeV)")
+        self.HSDEA = MyHist.MyHist(name="SDP",bins=100,range=[-0.2,0.0],label="Active",title="Straw Energy Loss",xlabel="$\\Delta$E (MeV)")
+        self.HSDEAM = MyHist.MyHist(name="SDP",bins=100,range=[-0.2,0.0],label="Mylar (dE/dx)",title="Straw Energy Loss",xlabel="$\\Delta$E (MeV)")
+        self.HSDEAA = MyHist.MyHist(name="SDP",bins=100,range=[-0.2,0.0],label="Argon (dE/dx)",title="Straw Energy Loss",xlabel="$\\Delta$E (MeV)")
+
+        self.HSUDist = MyHist.MyHist(name="SUDist",bins=100,range=[-600,50.0],label="All",title="Straw U WRT Edge",xlabel="$\\Delta$U (mm)")
+        self.HSUDistA = MyHist.MyHist(name="SUDist",bins=100,range=[-600,50.0],label="Active",title="Straw U WRT Edge",xlabel="$\\Delta$U (mm)")
+
     def Loop(self,files):
         elPDG = 11
         ibatch = 0
@@ -217,7 +274,6 @@ class DeRes(object):
             assert(ak.sum(ak.count_nonzero(nhits,axis=1)!=1) == 0)
             segs = segs[:,0]
             lhpars = lhpars[:,0]
-#            print("segs len",len(segs),"lhpars len",len(lhpars))
             FitCon = fitcon[:,0]
             NH = nhits[:,0]
             NHA = nhactive[:,0]
@@ -266,7 +322,40 @@ class DeRes(object):
             self.HNMC.fill(np.array(trkMCndigi[goodMC]))
 
             self.HSDOCA.fill(np.array(ak.flatten(mats,axis=1).doca))
-            self.HSADOCA.fill(np.array(ak.flatten(mats[mats.active],axis=1).doca))
+            self.HSDOCAA.fill(np.array(ak.flatten(mats[mats.active],axis=1).doca))
+            self.HSDOCAH.fill(np.array(ak.flatten(mats[np.logical_not(mats.hashit)],axis=1).doca))
+            self.HSDOCADH.fill(np.array(ak.flatten(mats[mats.drifthit],axis=1).doca))
+            self.HSDOCAE.fill(np.array(ak.flatten(mats[mats.pcalc==0],axis=1).doca))
+            self.HSDOCAAv.fill(np.array(ak.flatten(mats[mats.pcalc==1],axis=1).doca))
+
+            self.HSDOCAS.fill(np.sqrt(np.array(ak.flatten(mats,axis=1).docavar)))
+            self.HSDOCASA.fill(np.sqrt(np.array(ak.flatten(mats[mats.active],axis=1).docavar)))
+            self.HSDOCASH.fill(np.sqrt(np.array(ak.flatten(mats[np.logical_not(mats.hashit)],axis=1).docavar)))
+            self.HSDOCASDH.fill(np.sqrt(np.array(ak.flatten(mats[mats.drifthit],axis=1).docavar)))
+            self.HSDOCASE.fill(np.sqrt(np.array(ak.flatten(mats[mats.pcalc==0],axis=1).docavar)))
+            self.HSDOCASAv.fill(np.sqrt(np.array(ak.flatten(mats[mats.pcalc==1],axis=1).docavar)))
+
+
+            gpath =np.array(ak.flatten(mats[mats.active],axis=1).gaspath)
+            wpath = np.array(ak.flatten(mats[mats.active],axis=1).wallpath)
+            dirdot = np.array(ak.flatten(mats[mats.active],axis=1).dirdot)
+            tfact = np.sqrt(1.0 - np.square(dirdot))
+
+            self.HSGPathA.fill(gpath)
+            self.HSGPathT.fill(gpath*tfact)
+            self.HSWPathA.fill(wpath)
+            self.HSWPathT.fill(wpath*tfact)
+
+
+            self.HSRL.fill(np.array(ak.flatten(mats,axis=1).radlen))
+            self.HSRLA.fill(np.array(ak.flatten(mats[mats.active],axis=1).radlen))
+            self.HSDE.fill(np.array(ak.flatten(mats,axis=1).dp))
+            self.HSDEA.fill(np.array(ak.flatten(mats[mats.active],axis=1).dp))
+            self.HSDEAM.fill(np.array(ak.flatten(mats[mats.active],axis=1).wallpath*(-0.423))) #  MeV/mm for mylar
+            self.HSDEAA.fill(np.array(ak.flatten(mats[mats.active],axis=1).gaspath*(-7.85e-4))) # 0.0027 MeV/mm for argon
+            self.HSUDist.fill(np.array(ak.flatten(mats,axis=1).udist))
+            self.HSUDistA.fill(np.array(ak.flatten(mats[mats.active],axis=1).udist))
+
 
             # sample the fits at the specified
             for isid in range(len(self.TrackerSIDs)) :
@@ -478,17 +567,69 @@ class DeRes(object):
         print()
 
 
-    def PlotQuality(self):
-        fig, (acount,smat) = plt.subplots(1,2,layout='constrained', figsize=(10,5))
+    def PlotStraws(self):
+        fig, (acount,adoca,docasig) = plt.subplots(1,3,layout='constrained', figsize=(15,5))
         self.HNH.plot(acount)
         self.HNHA.plot(acount)
         self.HNS.plot(acount)
         self.HNSA.plot(acount)
         self.HNMC.plot(acount)
         acount.legend(loc="upper right")
-        self.HSDOCA.plot(smat)
-        self.HSADOCA.plot(smat)
-        smat.legend(loc="upper right")
+#        self.HSDOCA.plot(adoca)
+        self.HSDOCAA.plot(adoca)
+#        self.HSDOCAH.plot(adoca)
+#        self.HSDOCADH.plot(adoca)
+        self.HSDOCAE.plot(adoca)
+        self.HSDOCAAv.plot(adoca)
+        adoca.legend(loc="upper right")
+#        self.HSDOCAS.plot(docasig)
+        self.HSDOCASA.plot(docasig)
+#        self.HSDOCASH.plot(docasig)
+#        self.HSDOCASDH.plot(docasig)
+        self.HSDOCASE.plot(docasig)
+        self.HSDOCASAv.plot(docasig)
+        docasig.legend(loc="upper right")
+        fig, ((agaspath, awallpath,audist),(arl,adm,adummy)) = plt.subplots(2,3,layout='constrained', figsize=(15,10))
+
+        doca = uniform(0.0,2.515)
+        dsamples = doca.rvs(np.sum(self.HSWPathA.data))
+
+#        self.HSGPath.plot(agaspath)
+        agaspath.set_yscale('log')
+#        self.HSGPathA.plot(agaspath)
+        self.HSGPathT.plot(agaspath)
+        self.HSGPathM.fill(fxn_gaspath(dsamples))
+        self.HSGPathM.plot(agaspath)
+        agaspath.legend(loc="upper right")
+        print("KK Gas Path average = ",self.HSGPathT.average())
+        print("Model Gas Path average = ",self.HSGPathM.average())
+
+#        self.HSWPath.plot(awallpath)
+        awallpath.set_yscale('log')
+#        self.HSWPathA.plot(awallpath)
+        self.HSWPathT.plot(awallpath)
+        self.HSWPathM.fill(fxn_wallpath(dsamples))
+        self.HSWPathM.plot(awallpath)
+        awallpath.legend(loc="upper right")
+        print("KK Wall Path average = ",self.HSWPathT.average())
+        print("Model Wall Path average = ",self.HSWPathM.average())
+
+        arl.set_yscale('log')
+        self.HSRL.plot(arl)
+        self.HSRLA.plot(arl)
+        arl.legend(loc="upper right")
+        self.HSUDist.plot(audist)
+        self.HSUDistA.plot(audist)
+        audist.legend(loc="upper right")
+        adm.set_yscale('log')
+#        self.HSDE.plot(adm)
+        self.HSDEA.plot(adm)
+        self.HSDEAM.plot(adm)
+        self.HSDEAA.plot(adm)
+        adm.legend(loc="upper left")
+
+
+    def PlotQuality(self):
         fig, (afitcon,atrkqual) = plt.subplots(1,2,layout='constrained', figsize=(10,5))
         self.HTrkQual.plot(atrkqual)
         self.HFitCon.plot(afitcon)
@@ -502,6 +643,22 @@ class DeRes(object):
             self.HTrkRespMom[isid].plot(aresp[isid])
             self.HTrkRefRespMom[isid].plot(aresp[isid])
             self.HTrkNotRefRespMom[isid].plot(aresp[isid])
+            # fit momentum resolution
+            binsize = self.HTrkResoMom[isid].data[1]-self.HTrkResoMom[isid].data[0]
+            amp_0 = np.sum(self.HTrkResoMom[isid].data)*binsize # initial amplitude
+            p0 = np.array([amp_0,0.0,0.2])
+            binmid = np.zeros(len(self.HTrkResoMom[isid].data))
+            binerr = np.zeros(len(self.HTrkResoMom[isid].data))
+            for ibin in range(len(self.HTrkResoMom[isid].data)):
+                binmid[ibin] = 0.5*(self.HTrkResoMom[isid].edges[ibin] + self.HTrkResoMom[isid].edges[ibin+1])
+                binerr[ibin] = max(1.0,math.sqrt(self.HTrkResoMom[isid].data[ibin]))
+            popt, pcov = curve_fit(fxn_Gauss, binmid, self.HTrkResoMom[isid].data, p0, sigma=binerr)
+            areso[isid].plot(binmid, fxn_Gauss(binmid, *popt), 'r-',label="Fit")
+
+            areso[isid].text(0.6, 0.9, f"$\\mu$ = {popt[1]:.3f} $\\pm$ {np.sqrt(pcov[1][1]):.3f}",transform=areso[isid].transAxes)
+            areso[isid].text(0.6, 0.8, f"$\\sigma$ = {popt[2]:.3f} $\\pm$ {np.sqrt(pcov[2][2]):.3f}",transform=areso[isid].transAxes)
+
+
         amom[0].legend(loc="upper left")
         aresp[0].legend(loc="upper left")
 
@@ -527,6 +684,23 @@ class DeRes(object):
         self.HSTDMomMC.plot(admomMC)
         self.HAllDMomMC.plot(admomMC)
         admomMC.legend(loc="upper right")
+
+    def PlotPathlength(self):
+        fig, (adgpath, adwpath) = plt.subplots(1,2,layout='constrained', figsize=(10,5))
+        docas = np.linspace(0.0,2.515,num=1000)
+        wpvals = fxn_wallpath(docas)
+        gpvals = fxn_gaspath(docas)
+        adwpath.plot(docas,wpvals,linewidth=1)
+        adwpath.set(xlim=(0, 2.6), ylim=(0, 0.6))
+        adwpath.set_title("Wall Pathlength vs DOCA")
+        adwpath.set_xlabel("DOCA (mm)")
+        adwpath.set_ylabel("Pathlength (mm)")
+
+        adgpath.plot(docas,gpvals,linewidth=1)
+        adgpath.set(xlim=(0, 2.6), ylim=(0, 5.1))
+        adgpath.set_title("Gas Pathlength vs DOCA")
+        adgpath.set_xlabel("DOCA (mm)")
+        adgpath.set_ylabel("Pathlength (mm)")
 
     def PlotTarget(self):
         fig, ((arho,afoil,acost),(avgresp,latestresp,nnresp)) = plt.subplots(2,3,layout='constrained', figsize=(15,10))
