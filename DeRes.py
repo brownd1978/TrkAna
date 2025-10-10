@@ -270,6 +270,12 @@ class DeRes(object):
             trkMCSim = batch['trkmcsim']  # MC genealogy of particles
             trkMCndigi = batch['trkmc.ndigigood']  # MC true # of straw hits
             segsMC = batch['trksegsmc'] # SurfaceStep infor for true primary particle
+#            tsmplane = batch['trkmats.plane']
+#            tsmpanel = batch['trkmats.panel']
+#            tsmstraw = batch['trkmats.straw']
+#            tshplane = batch['trkhits.plane']
+#            tshpanel = batch['trkhits.panel']
+#            tshstraw = batch['trkhits.straw']
             # should be 1 track/event
             assert(ak.sum(ak.count_nonzero(nhits,axis=1)!=1) == 0)
             segs = segs[:,0]
@@ -281,6 +287,13 @@ class DeRes(object):
             NSA = nsactive[:,0]
             TrkQual = trkQual[:,0]
             mats = mats[:,0]
+
+#            tsmplane = tsmplane[:,0]
+#            tsmpanel = tsmpanel[:,0]
+#            tsmstraw = tsmstraw[:,0]
+#            tshplane = tshplane[:,0]
+#            tshpanel = tshpanel[:,0]
+#            tshstraw = tshstraw[:,0]
 
             # define good MC selection first, to allow downstfream comparisons
             segsMC = segsMC[:,0] # segments (of 1st MC match) of 1st track
