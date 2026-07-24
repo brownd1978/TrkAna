@@ -52,18 +52,32 @@ def fxn_gaspath(d):
     p = 2.0*np.sqrt(id2)
     return p
 
+def fxn_radyx(y):
+    val = (4/3 - 4*y/3 + y*y)/y
+    return val
+
+def fxn_radysum(ymax):
+    sumy = (4.0*ymax-2.0*ymax*ymax + ymax*ymax*ymax)/3
+    return sumy
+
+def fxn_radysumvar(ymax):
+    yvar = 2*ymax*ymax/3 - 4*ymax*ymax*ymax/9 + ymax*ymax*ymax*ymax/4
+    return yvar
+
 class DeRes(object):
-    def __init__(self,momrange,costrange,minNActive,minFitCon,minTrkQual):
+    def __init__(self,momrange,costrange,minNActive,minFitCon,minTrkQual,index=0):
         self.MomRange = momrange
         self.CosTRange = costrange
         self.minNActive = minNActive
         self.minFitCon = minFitCon
         self.minTrkQual = minTrkQual
+        self.index=index
 
         nDeltaMomBins = 200
-        nMomBins = 200
+        nMomBins = 100
         momrange=(self.MomRange[0],107)
         momresorange=(-2.5,2.5)
+        mompullrange=(-10,10)
         momresprange=(-10,5)
         momtitle="Momentum at "
         momxlabel="Momentum (MeV)"
@@ -75,20 +89,23 @@ class DeRes(object):
         self.HTrkMCMom = [None]*3
         self.HTrkRespMom = [None]*3
         self.HTrkResoMom = [None]*3
+        self.HTrkPullMom = [None]*3
         self.HTrkRefRespMom = [None]*3
         self.HTrkNotRefRespMom = [None]*3
         self.TrackerSIDs = [SID.TT_Front(), SID.TT_Mid(), SID.TT_Back()]
         momxlabel = "Momentum (MeV)"
         momresotitle = "Momentum Resolution"
-        momresotitle = "Momentum Resolution"
+        mompulltitle = "Momentum Pull"
         momresptitle = "Momentum Response"
         dmomxlabel = "$\\Delta$ Momentum (MeV)"
+        pullxlabel = "$\\Delta$ Momentum/$\\sigma$"
         # momentum in tracker
         for isid in range(len(self.TrackerSIDs)):
             loc = "@"+SID.SurfaceName(self.TrackerSIDs[isid])
             self.HTrkFitMom[isid] = MyHist.MyHist(name=loc+"Mom",label="Fit",bins=nMomBins, range=momrange,title="Momentum"+loc,xlabel=momxlabel)
             self.HTrkMCMom[isid] = MyHist.MyHist(name=loc+"Mom",label="MC",bins=nMomBins, range=momrange,title="Momentum"+loc,xlabel=momxlabel)
             self.HTrkResoMom[isid] = MyHist.MyHist(name=loc+"Resolution",label="",bins=nDeltaMomBins, range=momresorange,title=momresotitle+loc,xlabel=dmomxlabel)
+            self.HTrkPullMom[isid] = MyHist.MyHist(name=loc+"Pull",label="",bins=nDeltaMomBins, range=mompullrange,title=mompulltitle+loc,xlabel=pullxlabel)
             self.HTrkRespMom[isid] = MyHist.MyHist(name=loc+"Response",label="All",bins=nDeltaMomBins, range=momresprange,title=momresptitle+loc,xlabel=dmomxlabel)
             self.HTrkRefRespMom[isid] = MyHist.MyHist(name=loc+"Response",label="NTSDA == 0",bins=nDeltaMomBins, range=momresprange,title=momresptitle+loc,xlabel=dmomxlabel)
             self.HTrkNotRefRespMom[isid] = MyHist.MyHist(name=loc+"Response",label="NTSDA > 0",bins=nDeltaMomBins, range=momresprange,title=momresptitle+loc,xlabel=dmomxlabel)
@@ -118,7 +135,8 @@ class DeRes(object):
         self.HIPADMomMC = MyHist.MyHist(bins=nDMomBins,range=dMomRange,name="DMomMC",label="IPA",xlabel=dMomxlabel,title=dMomtitleMC)
         self.HAllDMomMC = MyHist.MyHist(bins=nDMomBins,range=dMomRange,name="DMomMC",label="All",xlabel=dMomxlabel,title=dMomtitleMC)
 
-
+        self.HTrkELoss = MyHist.MyHist(bins=100,range=[0.0,20.0],name="ELoss",label="Fit",xlabel="$E_{Tracker Front}$ - $E_{Tracker Back}$ (MeV)",title="Energy Loss in Tracker")
+        self.HTrkELossMC = MyHist.MyHist(bins=100,range=[0.0,20.0],name="ELoss",label="MC",xlabel="$E_{Tracker Front}$ - $E_{Tracker Back}$ (MeV)",title="Energy Loss in Tracker")
 
         # target intersections
         # momentum at target intersections
@@ -183,6 +201,8 @@ class DeRes(object):
         self.Hd0nstfg0 = MyHist.MyHist(name="d0",bins=nd0,range=d0range,label="N$_{ST Foil}$>0",title="d0@TT_Front",xlabel="d$_{0}$ (mm)")
         self.Hd0nstce0 = MyHist.MyHist(name="d0",bins=nd0,range=d0range,label="N$_{ST Cyl.}$==0",title="d0@TT_Front",xlabel="d$_{0}$ (mm)")
         self.Hd0nstcg0 = MyHist.MyHist(name="d0",bins=nd0,range=d0range,label="N$_{ST Cyl.}$>0",title="d0@TT_Front",xlabel="d$_{0}$ (mm)")
+
+        # cutset C inputs
         rmaxrange = [425,725]
         self.Hrmax = MyHist.MyHist(name="rmax",bins=50,range=rmaxrange,label="No Cut",title="R$_{max}$@TT_Front",xlabel="R$_{max}$ (mm)")
         self.Hrmaxcc = MyHist.MyHist(name="rmax",bins=50,range=rmaxrange,label="Cutset C'",title="R$_{max}$@TT_Front",xlabel="R$_{max}$ (mm)")
@@ -252,7 +272,8 @@ class DeRes(object):
         ibatch = 0
         np.set_printoptions(precision=5,floatmode='fixed')
         print("Processing batch ",end=' ')
-        for batch,rep in uproot.iterate(files,filter_name="/evtinfo|trk|trkmc|trksegs|trkmcsim|trksegsmc|trkqual|trksegpars_lh/i",report=True):
+        for batch,rep in uproot.iterate(files,filter_name="/evtinfo|trk.trk|trkmc|trksegs|trkmcsim|trksegsmc|trkqual|trksegpars_lh/i",report=True):
+#        for batch,rep in uproot.iterate(files,report=True):
             print(ibatch,end=' ')
             ibatch = ibatch+1
             runnum = batch['run']
@@ -270,39 +291,24 @@ class DeRes(object):
             trkMCSim = batch['trkmcsim']  # MC genealogy of particles
             trkMCndigi = batch['trkmc.ndigigood']  # MC true # of straw hits
             segsMC = batch['trksegsmc'] # SurfaceStep infor for true primary particle
-#            tsmplane = batch['trkmats.plane']
-#            tsmpanel = batch['trkmats.panel']
-#            tsmstraw = batch['trkmats.straw']
-#            tshplane = batch['trkhits.plane']
-#            tshpanel = batch['trkhits.panel']
-#            tshstraw = batch['trkhits.straw']
-            # should be 1 track/event
-            assert(ak.sum(ak.count_nonzero(nhits,axis=1)!=1) == 0)
-            segs = segs[:,0]
-            lhpars = lhpars[:,0]
-            FitCon = fitcon[:,0]
-            NH = nhits[:,0]
-            NHA = nhactive[:,0]
-            NS = nstraws[:,0]
-            NSA = nsactive[:,0]
-            TrkQual = trkQual[:,0]
-            mats = mats[:,0]
-
-#            tsmplane = tsmplane[:,0]
-#            tsmpanel = tsmpanel[:,0]
-#            tsmstraw = tsmstraw[:,0]
-#            tshplane = tshplane[:,0]
-#            tshpanel = tshpanel[:,0]
-#            tshstraw = tshstraw[:,0]
+            segs = segs[:,self.index]
+            lhpars = lhpars[:,self.index]
+            FitCon = fitcon[:,self.index]
+            NH = nhits[:,self.index]
+            NHA = nhactive[:,self.index]
+            NS = nstraws[:,self.index]
+            NSA = nsactive[:,self.index]
+            TrkQual = trkQual[:,self.index]
+            mats = mats[:,self.index]
 
             # define good MC selection first, to allow downstfream comparisons
-            segsMC = segsMC[:,0] # segments (of 1st MC match) of 1st track
-            trkMCSim = trkMCSim[:,0,0] # primary MC match of 1st track
-            trkMCndigi = trkMCndigi[:,0]
+            segsMC = segsMC[:,self.index] # segments (of 1st MC match) of 1st track
+            trkMCSim = trkMCSim[:,self.index,0] # primary MC match of 1st track
+            trkMCndigi = trkMCndigi[:,self.index]
 
             # basic consistency test
             assert((len(runnum) == len( segs)) & (len(segs) == len(segsMC)) & (len(segs) == len(trkMCSim)) & (len(NHA) == len(segs)))
-            goodMC = (trkMCSim.pdg == elPDG) & (trkMCSim.trkrel._rel == 0)
+            goodMC = ((trkMCSim.pdg == elPDG) | (trkMCSim.pdg == -elPDG)) & (trkMCSim.trkrel._rel == 0)
             OMom = trkMCSim.mom.magnitude()
             goodMC = goodMC & (OMom>self.MomRange[0]) & (OMom < self.MomRange[1])
             OMom = OMom[goodMC]
@@ -375,6 +381,7 @@ class DeRes(object):
                 sid = self.TrackerSIDs[isid]
                 ssegs = segs[(segs.sid == sid) & (segs.mom.z() > 0.0) ]
                 mom = ssegs.mom.magnitude()
+                momerr = ssegs.momerr
                 mom = mom[(mom > self.MomRange[0]) & (mom < self.MomRange[1])]
                 hasmom = ak.count_nonzero(mom,axis=1)==1
                 ssegsMC = segsMC[(segsMC.sid == sid) & (segsMC.mom.z() > 0.0) ]
@@ -385,6 +392,7 @@ class DeRes(object):
                 notreflectable = good & np.logical_not(noTSDA)
                 goodmom = mom[good]
                 goodmom = ak.flatten(goodmom,axis=1)
+                goodmomerr = ak.flatten(momerr[good],axis=1)
                 refmom = mom[reflectable]
                 refmom = ak.flatten(refmom,axis=1)
                 notrefmom = mom[notreflectable]
@@ -395,13 +403,39 @@ class DeRes(object):
                 self.HTrkFitMom[isid].fill(np.array(goodmom))
                 self.HTrkMCMom[isid].fill(np.array(goodmomMC))
                 momreso = goodmom - goodmomMC
+                mompull = momreso/goodmomerr
                 self.HTrkResoMom[isid].fill(np.array(momreso))
+                self.HTrkPullMom[isid].fill(np.array(mompull))
                 momresp = goodmom - OMom[good]
                 self.HTrkRespMom[isid].fill(np.array(momresp))
                 momrefresp = refmom - OMom[reflectable]
                 momnotrefresp = notrefmom - OMom[notreflectable]
                 self.HTrkRefRespMom[isid].fill(np.array(momrefresp))
                 self.HTrkNotRefRespMom[isid].fill(np.array(momnotrefresp))
+
+            # MC and Fit tracker energy loss
+            ttfrontseg = segs[(segs.sid == SID.TT_Front()) & (segs.mom.z() > 0.0) ]
+            ttbackseg = segs[(segs.sid == SID.TT_Back()) & (segs.mom.z() > 0.0) ]
+            ttfrontsegMC = segsMC[(segsMC.sid == SID.TT_Front()) & (segsMC.mom.z() > 0.0) ]
+            ttbacksegMC = segsMC[(segsMC.sid == SID.TT_Back()) & (segsMC.mom.z() > 0.0) ]
+            ttfrontmom = ttfrontseg.mom.magnitude()
+            ttbackmom = ttbackseg.mom.magnitude()
+            ttfrontmomMC = ttfrontsegMC.mom.magnitude()
+            ttbackmomMC = ttbacksegMC.mom.magnitude()
+            goodcomp = (ak.count_nonzero(ttfrontmom,axis=1)==1 ) & \
+                        (ak.count_nonzero(ttbackmom,axis=1)==1 ) & \
+                        (ak.count_nonzero(ttfrontmomMC,axis=1)==1 ) & \
+                        (ak.count_nonzero(ttbackmomMC,axis=1)==1 )
+            ttfrontmom = ttfrontmom[goodcomp]
+            ttbackmom = ttbackmom[goodcomp]
+            ttfrontmomMC = ttfrontmomMC[goodcomp]
+            ttbackmomMC = ttbackmomMC[goodcomp]
+            eloss = ak.flatten(ttfrontmom-ttbackmom)
+            elossMC = ak.flatten(ttfrontmomMC-ttbackmomMC)
+#            print(eloss)
+#            print(elossMC)
+            self.HTrkELoss.fill(np.array(eloss))
+            self.HTrkELossMC.fill(np.array(elossMC))
 
             # count IPA and target intersections
             gsegs = segs[goodFit]
@@ -614,8 +648,8 @@ class DeRes(object):
         self.HSGPathM.fill(fxn_gaspath(dsamples))
         self.HSGPathM.plot(agaspath)
         agaspath.legend(loc="upper right")
-        print("KK Gas Path average = ",self.HSGPathT.average())
-        print("Model Gas Path average = ",self.HSGPathM.average())
+        print("KK Gas Path mean = ",self.HSGPathT.mean())
+        print("Model Gas Path mean = ",self.HSGPathM.mean())
 
 #        self.HSWPath.plot(awallpath)
         awallpath.set_yscale('log')
@@ -624,8 +658,8 @@ class DeRes(object):
         self.HSWPathM.fill(fxn_wallpath(dsamples))
         self.HSWPathM.plot(awallpath)
         awallpath.legend(loc="upper right")
-        print("KK Wall Path average = ",self.HSWPathT.average())
-        print("Model Wall Path average = ",self.HSWPathM.average())
+        print("KK Wall Path mean = ",self.HSWPathT.mean())
+        print("Model Wall Path mean = ",self.HSWPathM.mean())
 
         arl.set_yscale('log')
         self.HSRL.plot(arl)
@@ -648,14 +682,29 @@ class DeRes(object):
         self.HFitCon.plot(afitcon)
 
     def PlotTrackerMomentum(self):
-        fig, (amom,areso,aresp) = plt.subplots(3,3,layout='constrained', figsize=(15,15))
+        fig, (amom,aresp) = plt.subplots(2,3,layout='constrained', figsize=(15,10))
         for isid in range(len(self.TrackerSIDs)) :
             self.HTrkFitMom[isid].plot(amom[isid])
+            fwhm = self.HTrkFitMom[isid].FWHM()
+            maxval = self.HTrkFitMom[isid].maxVal()
+            maxx = self.HTrkFitMom[isid].maxX()
+            amom[isid].text(0.2,0.5,f"Fit FWHM = {fwhm:.3f}",transform=amom[isid].transAxes)
+            xfwhm=[maxx-0.5*fwhm,maxx+0.5*fwhm]
+            yfwhm=[0.5*maxval,0.5*maxval]
+            amom[isid].plot(xfwhm,yfwhm)
+            amom[isid].plot([maxx,maxx],[0.0,maxval])
+
             self.HTrkMCMom[isid].plot(amom[isid])
-            self.HTrkResoMom[isid].plot(areso[isid])
             self.HTrkRespMom[isid].plot(aresp[isid])
             self.HTrkRefRespMom[isid].plot(aresp[isid])
             self.HTrkNotRefRespMom[isid].plot(aresp[isid])
+
+        amom[0].legend(loc="upper left")
+        aresp[0].legend(loc="upper left")
+
+        fig, (areso,apull) = plt.subplots(2,3,layout='constrained', figsize=(15,10))
+        for isid in range(len(self.TrackerSIDs)) :
+            self.HTrkResoMom[isid].plot(areso[isid])
             # fit momentum resolution
             binsize = self.HTrkResoMom[isid].data[1]-self.HTrkResoMom[isid].data[0]
             amp_0 = np.sum(self.HTrkResoMom[isid].data)*binsize # initial amplitude
@@ -666,14 +715,34 @@ class DeRes(object):
                 binmid[ibin] = 0.5*(self.HTrkResoMom[isid].edges[ibin] + self.HTrkResoMom[isid].edges[ibin+1])
                 binerr[ibin] = max(1.0,math.sqrt(self.HTrkResoMom[isid].data[ibin]))
             popt, pcov = curve_fit(fxn_Gauss, binmid, self.HTrkResoMom[isid].data, p0, sigma=binerr)
-            areso[isid].plot(binmid, fxn_Gauss(binmid, *popt), 'r-',label="Fit")
 
+            stdev = self.HTrkResoMom[isid].RMS()
+            fwhm = self.HTrkResoMom[isid].FWHM()
+            areso[isid].plot(binmid, fxn_Gauss(binmid, *popt), 'r-',label="Fit")
             areso[isid].text(0.6, 0.9, f"$\\mu$ = {popt[1]:.3f} $\\pm$ {np.sqrt(pcov[1][1]):.3f}",transform=areso[isid].transAxes)
             areso[isid].text(0.6, 0.8, f"$\\sigma$ = {popt[2]:.3f} $\\pm$ {np.sqrt(pcov[2][2]):.3f}",transform=areso[isid].transAxes)
+            areso[isid].text(0.6, 0.7, f"RMS = {stdev:.3f}",transform=areso[isid].transAxes)
+            areso[isid].text(0.6, 0.6, f"FWHM = {fwhm:.3f}",transform=areso[isid].transAxes)
 
+            self.HTrkPullMom[isid].plot(apull[isid])
+            # fit momentum pull
+            binsize = self.HTrkPullMom[isid].data[1]-self.HTrkPullMom[isid].data[0]
+            amp_0 = np.sum(self.HTrkPullMom[isid].data)*binsize # initial amplitude
+            p0 = np.array([amp_0,0.0,0.2])
+            binmid = np.zeros(len(self.HTrkPullMom[isid].data))
+            binerr = np.zeros(len(self.HTrkPullMom[isid].data))
+            for ibin in range(len(self.HTrkPullMom[isid].data)):
+                binmid[ibin] = 0.5*(self.HTrkPullMom[isid].edges[ibin] + self.HTrkPullMom[isid].edges[ibin+1])
+                binerr[ibin] = max(1.0,math.sqrt(self.HTrkPullMom[isid].data[ibin]))
+            popt, pcov = curve_fit(fxn_Gauss, binmid, self.HTrkPullMom[isid].data, p0, sigma=binerr)
 
-        amom[0].legend(loc="upper left")
-        aresp[0].legend(loc="upper left")
+            stdev = self.HTrkPullMom[isid].RMS()
+            fwhm = self.HTrkPullMom[isid].FWHM()
+            apull[isid].plot(binmid, fxn_Gauss(binmid, *popt), 'r-',label="Fit")
+            apull[isid].text(0.6, 0.9, f"$\\mu$ = {popt[1]:.3f} $\\pm$ {np.sqrt(pcov[1][1]):.3f}",transform=apull[isid].transAxes)
+            apull[isid].text(0.6, 0.8, f"$\\sigma$ = {popt[2]:.3f} $\\pm$ {np.sqrt(pcov[2][2]):.3f}",transform=apull[isid].transAxes)
+            apull[isid].text(0.6, 0.7, f"RMS = {stdev:.3f}",transform=apull[isid].transAxes)
+            apull[isid].text(0.6, 0.6, f"FWHM = {fwhm:.3f}",transform=apull[isid].transAxes)
 
     def PlotMaterial(self):
         fig, ([aninter,admom],[aninterMC,admomMC]) = plt.subplots(2,2,layout='constrained', figsize=(10,10))
@@ -698,6 +767,13 @@ class DeRes(object):
         self.HAllDMomMC.plot(admomMC)
         admomMC.legend(loc="upper right")
 
+    def PlotELoss(self):
+        fig,aeloss = plt.subplots(1,1,layout='constrained', figsize=(5,5))
+        self.HTrkELoss.plot(aeloss)
+        self.HTrkELossMC.plot(aeloss)
+        aeloss.legend(loc="upper right")
+        aeloss.set_yscale('log')
+
     def PlotPathlength(self):
         fig, (adgpath, adwpath) = plt.subplots(1,2,layout='constrained', figsize=(10,5))
         docas = np.linspace(0.0,2.515,num=1000)
@@ -714,6 +790,42 @@ class DeRes(object):
         adgpath.set_title("Gas Pathlength vs DOCA")
         adgpath.set_xlabel("DOCA (mm)")
         adgpath.set_ylabel("Pathlength (mm)")
+
+    def PlotRadLoss(self):
+        fig, (ayx, ayxy, aysum, aysig ) = plt.subplots(1,4,layout='constrained', figsize=(20,5))
+        ymax = 0.1
+        yvals = np.linspace(0.0,1.0,num=1000)
+        ymaxvals = np.linspace(0.0,ymax,num=1000)
+        radyx = fxn_radyx(yvals)
+        radyxy = yvals*radyx
+        radysum = fxn_radysum(ymaxvals)
+        radysumvar = fxn_radysumvar(ymaxvals)
+        radysumsig = np.sqrt(radysumvar)
+
+        ayx.plot(yvals,radyx,linewidth=1)
+        ayx.set(xlim=(0, 1.0), ylim=(0.1, 1e3))
+        ayx.set_title("Brehms x-section vs y")
+        ayx.set_xlabel("y")
+        ayx.set_ylabel("dsigma/dy/$X_0$")
+        ayx.set_yscale('log')
+
+        ayxy.plot(yvals,radyxy,linewidth=1)
+        ayxy.set(xlim=(0, 1.0), ylim=(0.0, 2.0))
+        ayxy.set_title("Brehms x-section*y vs y")
+        ayxy.set_xlabel("y")
+        ayxy.set_ylabel("y*dsigma/dy/$X_0$")
+
+        aysum.plot(ymaxvals,radysum,linewidth=1)
+        aysum.set(xlim=(0, ymax), ylim=(0.0, 0.2))
+        aysum.set_title("Brehms sum y vs ymax")
+        aysum.set_xlabel("ymax")
+        aysum.set_ylabel("Sum y/$X_0$")
+
+        aysig.plot(ymaxvals,radysumsig,linewidth=1)
+        aysig.set(xlim=(0, ymax), ylim=(0, 0.2))
+        aysig.set_title("Brehms y sum sigma vs ymax")
+        aysig.set_xlabel("ymax")
+        aysig.set_ylabel("y sum sigma/$X_0$")
 
     def PlotTarget(self):
         fig, ((arho,afoil,acost),(avgresp,latestresp,nnresp)) = plt.subplots(2,3,layout='constrained', figsize=(15,10))

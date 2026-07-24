@@ -3,7 +3,7 @@
 #
 import uproot
 import awkward as ak
-def Branches(file):
-    fullfile = file+":EventNtuple/ntuple"
+def Branches(file,tuple="EventNtuple/ntuple"):
+    fullfile = file+":"+tuple
     with uproot.open(fullfile) as rfile:
         print(rfile.keys())

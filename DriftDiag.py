@@ -42,7 +42,7 @@ class DriftDiag(object):
         ibatch = 0
         np.set_printoptions(precision=5,floatmode='fixed')
         print("Processing batch ",end=' ')
-        for batch,rep in uproot.iterate(files,filter_name="/evtinfo|trk|trksegs|trkmcsim|trksegsmc|trkqual|trkhits|trkhitsmc/i",report=True):
+        for batch,rep in uproot.iterate(files,filter_name="/evtinfo|trk.trk|trksegs|trkmcsim|trksegsmc|trkqual|trkhits|trkhitsmc/i",report=True):
             print(ibatch,end=' ')
             # should be 1 track/event
             nhits = batch['trk.nhits']  # track N hits

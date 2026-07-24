@@ -27,9 +27,9 @@ class CompTracks(object):
         self.PDGName = PDGNames[self.PDG]
         # setup cuts; these should be overrideable FIXME
         self.MinNHits = 20
-        self.MinFitCon = 1.0e-5
+        self.MinFitCon = -1.0
         self.MaxDeltaT = 5.0 # nsec
-        self.MinTQ = 0.2 # ANN output
+        self.MinTQ = -1 # ANN output
         # Surface Ids
         self.SID = sid
         self.CompName = SID.SurfaceName(sid)
@@ -46,6 +46,16 @@ class CompTracks(object):
         self.HDNStraws = MyHist.MyHist(name="HDNStraws",bins=21,range=[-10.5,10.5],label="Secondary - Primary NStraws",title="Fit $\\Delta$",xlabel="$\\Delta$ N")
         self.HPriRadlen = MyHist.MyHist(name="HPriRadlen",bins=100,range=[0.0,0.04],label="Primary Radlen",title="Fit Radlen",xlabel="$X_{0}$")
         self.HSecRadlen = MyHist.MyHist(name="HSecRadlen",bins=100,range=[0.0,0.04],label="Secondary Radlen",title="Fit Radlen",xlabel="$X_{0}$")
+
+        self.HPriInterSID = MyHist.MyHist(name="PriSIDs",label="Primary",bins=110, range=[0,109],title="SID of Intersections",xlabel="SID")
+        self.HPriTargetIndex = MyHist.MyHist(name="PriTind",label="Primary",bins=38, range=[0,37],title="Index of Target Intersections",xlabel="Foil Index")
+        self.HPriTargetdE = MyHist.MyHist(name="PriFoildE",label="Primary",bins=100, range=[-1,0],title="dE of Target Foil Intersections",xlabel="dE (MeV)")
+        self.HPriIPAdE = MyHist.MyHist(name="PriIPAdE",label="Primary",bins=100, range=[-1,0],title="dE of IPA Intersections",xlabel="dE (MeV)")
+
+        self.HSecInterSID = MyHist.MyHist(name="SecSIDs",label="Secondary",bins=110, range=[0,109],title="SID of Intersections",xlabel="SID")
+        self.HSecTargetIndex = MyHist.MyHist(name="SecTind",label="Secondary",bins=38, range=[0,37],title="Index of Target Intersections",xlabel="Foil Index")
+        self.HSecTargetdE = MyHist.MyHist(name="SecFoildE",label="Secondary",bins=100, range=[-1,0],title="dE of Target Foil Intersections",xlabel="dE (MeV)")
+        self.HSecIPAdE = MyHist.MyHist(name="SecIPAdE",label="Secondary",bins=100, range=[-1,0],title="dE of IPA Intersections",xlabel="dE (MeV)")
 
         # Momentum histograms
         nMomBins = 100
@@ -65,7 +75,7 @@ class CompTracks(object):
             Files[i] = files[i]+":"+treename
         ibatch = 0
         print("Processing batch ",end=' ')
-        for batch,rep in uproot.iterate(Files,filter_name="/evtinfo|trk|trksegs|trkmcsim|trksegsmc/i",report=True):
+        for batch,rep in uproot.iterate(Files,filter_name="/evtinfo|trk.trk|trksegs|trkmcsim|trksegsmc|trkqual/i",report=True):
             print(ibatch,end=' ')
             ibatch = ibatch+1
             segs = batch['trksegs'] # track fit samples
@@ -169,6 +179,24 @@ class CompTracks(object):
                 for ievt in range(len(ds_runnum)):
                     print(ds_runnum[ievt],":", ds_subrun[ievt],":", ds_event[ievt],",",pns_diff[ievt],",",sns_diff[ievt])
 
+            self.HPriInterSID.fill(np.array(ak.flatten(priSegs.sid)))
+            # target foils
+            foilpriSegs = priSegs[priSegs.sid==SID.ST_Foils()]
+            self.HPriTargetIndex.fill(np.array(ak.flatten(foilpriSegs.sindex)))
+            self.HPriTargetdE.fill(np.array(ak.flatten(foilpriSegs.dmom)))
+            # IPA intersections
+            ipapriSegs = priSegs[priSegs.sid==SID.IPA()]
+            self.HPriIPAdE.fill(np.array(ak.flatten(ipapriSegs.dmom)))
+
+            self.HSecInterSID.fill(np.array(ak.flatten(secSegs.sid)))
+            # target foils
+            foilsecSegs = secSegs[secSegs.sid==SID.ST_Foils()]
+            self.HSecTargetIndex.fill(np.array(ak.flatten(foilsecSegs.sindex)))
+            self.HSecTargetdE.fill(np.array(ak.flatten(foilsecSegs.dmom)))
+            # IPA intersections
+            ipasecSegs = secSegs[secSegs.sid==SID.IPA()]
+            self.HSecIPAdE.fill(np.array(ak.flatten(ipasecSegs.dmom)))
+
     def PlotMom(self):
         fig, (priMom, secMom, deltaMom) = plt.subplots(1,3,layout='constrained', figsize=(15,5))
         primom = self.HPriMom.plot(priMom)
@@ -196,7 +224,7 @@ class CompTracks(object):
         mean = np.average(binmid,weights=self.HDeltaMom.data)
         var = np.average(np.square(binmid-mean),weights=self.HDeltaMom.data)
         stdev = math.sqrt(var)
-        print(mean,var,stdev)
+#        print(mean,var,stdev)
         deltaMom.set_yscale("log")
         deltaMom.set_ylim(ymin=0.001*maxval,ymax=2.0*maxval)
         deltaMom.plot(binmid, fxn_Gauss(binmid, *popt), 'r-',label="Fit")
@@ -230,4 +258,25 @@ class CompTracks(object):
         pritq = self.HPriTQ.plot(atq)
         sectq = self.HSecTQ.plot(atq)
         atq.legend(loc="upper right")
+
+    def PlotInters(self):
+        fig, ( [sids,tindex],[tdE,ipadE]) = plt.subplots(2,2,layout='constrained', figsize=(10,10))
+        self.HPriInterSID.plot(sids)
+        self.HSecInterSID.plot(sids)
+        sids.legend(loc="upper right")
+
+        self.HPriTargetIndex.plot(tindex)
+        self.HSecTargetIndex.plot(tindex)
+        tindex.legend(loc="upper right")
+
+        self.HPriTargetdE.plot(tdE)
+        self.HSecTargetdE.plot(tdE)
+        tdE.legend(loc="upper right")
+
+        self.HPriIPAdE.plot(ipadE)
+        self.HSecIPAdE.plot(ipadE)
+        ipadE.legend(loc="upper right")
+
+        print("Primary # of intersections",self.HPriInterSID.integral(),"Target Inters",self.HPriTargetIndex.integral(),"IPA Inters",self.HPriIPAdE.integral())
+        print("Secondary # of intersections",self.HSecInterSID.integral(),"Target Inters",self.HSecTargetIndex.integral(),"IPA Inters",self.HSecIPAdE.integral())
 
