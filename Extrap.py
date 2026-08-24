@@ -23,6 +23,8 @@ class Extrap(object):
         self.HTargetIndex = MyHist.MyHist(name="Tind",label="All",bins=38, range=[0,37],title="Index of Target Intersections",xlabel="Foil Index")
         self.HTargetdE = MyHist.MyHist(name="TFoildE",label="All",bins=100, range=[-1,0],title="dE of Target Foil Intersections",xlabel="dE (MeV)")
         self.HIPAdE = MyHist.MyHist(name="IPAdE",label="All",bins=100, range=[-1,0],title="dE of IPA Intersections",xlabel="dE (MeV)")
+        self.HNStraw = MyHist.MyHist(name="NStraw",label="All",bins=100, range=[-0.5,99.5],title="# of Straw Intersections",xlabel="dE (MeV)")
+        self.HStrawdE = MyHist.MyHist(name="StrawdE",label="All",bins=100, range=[-0.1,0],title="dE of Straw Intersections",xlabel="dE (MeV)")
 
         self.HInterMCSID = MyHist.MyHist(name="MCSIDs",label="All",bins=110, range=[0,109],title="SID of MC Intersections",xlabel="SID")
         self.HTargetMCEDep = MyHist.MyHist(name="TFoilMCEDep",label="All",bins=100, range=[0,1],title="MC EDep of Target Foil Intersections",xlabel="MCEDep (MeV)")
@@ -31,7 +33,7 @@ class Extrap(object):
         ibatch = 0
         np.set_printoptions(precision=5,floatmode='fixed')
         print("Processing batch ",end=' ')
-        for batch,rep in uproot.iterate(files,filter_name="/evtinfo|trk.trk|trkmc|trksegs|trkmcsim|trksegsmc|trkqual|trksegpars_lh/i",report=True):
+        for batch,rep in uproot.iterate(files,filter_name="/evtinfo|trk.trk|trkmc|trksegs|trkmcsim|trksegsmc|trkmats/i",report=True):
             print(ibatch,end=' ')
             segs = batch['trksegs'] # track fit samples
             segs = segs[:,0] # first track
@@ -46,6 +48,14 @@ class Extrap(object):
             # IPA intersections
             ipasegs = segs[segs.sid==SID.IPA()]
             self.HIPAdE.fill(np.array(ak.flatten(ipasegs.dmom)))
+            # straw intersections
+            smat = batch['trkmats']
+            smat = smat[:,0]
+            smat = smat[smat.active]
+            nactive = ak.count(smat.active,axis=-1)
+            self.HStrawdE.fill(np.array(ak.flatten(smat.dp)))
+            self.HNStraw.fill(np.array(nactive))
+
             #MC truth
             self.HInterMCSID.fill(np.array(ak.flatten(segsMC.sid)))
             foilsegsMC = segsMC[segsMC.sid==SID.ST_Foils()]
@@ -61,6 +71,10 @@ class Extrap(object):
         self.HTargetdE.plot(tdE)
         self.HIPAdE.plot(ipadE)
         print("total # of intersections",self.HInterSID.integral(),"Target Inters",self.HTargetIndex.integral(),"IPA Inters",self.HIPAdE.integral())
+
+        fig, ( nst,stde) = plt.subplots(1,2,layout='constrained', figsize=(10,5))
+        self.HNStraw.plot(nst)
+        self.HStrawdE.plot(stde)
 
         fig, ( [sids,tindex],[tEDep,ipaEDep]) = plt.subplots(2,2,layout='constrained', figsize=(10,10))
         self.HInterMCSID.plot(sids)

@@ -270,9 +270,10 @@ class DeRes(object):
     def Loop(self,files):
         elPDG = 11
         ibatch = 0
+        nevt = 0
         np.set_printoptions(precision=5,floatmode='fixed')
         print("Processing batch ",end=' ')
-        for batch,rep in uproot.iterate(files,filter_name="/evtinfo|trk.trk|trkmc|trksegs|trkmcsim|trksegsmc|trkqual|trksegpars_lh/i",report=True):
+        for batch,rep in uproot.iterate(files,filter_name="/evtinfo|trk.trk|trkmc|trksegs|trkmcsim|trksegsmc|trkqual|trksegpars_lh|trkmats/i",report=True):
 #        for batch,rep in uproot.iterate(files,report=True):
             print(ibatch,end=' ')
             ibatch = ibatch+1
@@ -300,7 +301,7 @@ class DeRes(object):
             NSA = nsactive[:,self.index]
             TrkQual = trkQual[:,self.index]
             mats = mats[:,self.index]
-
+            nevt += ak.count_nonzero(FitCon)
             # define good MC selection first, to allow downstfream comparisons
             segsMC = segsMC[:,self.index] # segments (of 1st MC match) of 1st track
             trkMCSim = trkMCSim[:,self.index,0] # primary MC match of 1st track
@@ -387,6 +388,7 @@ class DeRes(object):
                 ssegsMC = segsMC[(segsMC.sid == sid) & (segsMC.mom.z() > 0.0) ]
                 momMC = ssegsMC.mom.magnitude()
                 hasMC = ak.count_nonzero(momMC,axis=1)==1
+#                print("hasMC for sid ",sid,"has",ak.count_nonzero(hasMC,axis=0),"entries")
                 good = hasMC & goodFit & hasmom
                 reflectable = good & noTSDA
                 notreflectable = good & np.logical_not(noTSDA)
@@ -400,6 +402,7 @@ class DeRes(object):
                 goodmomMC = momMC[good]
                 goodmomMC = ak.flatten(goodmomMC,axis=1)
                 assert(len(goodmom) == len(goodmomMC) )
+#                print("Total of",len(goodmom),"good resolution entries for",sid)
                 self.HTrkFitMom[isid].fill(np.array(goodmom))
                 self.HTrkMCMom[isid].fill(np.array(goodmomMC))
                 momreso = goodmom - goodmomMC
@@ -607,11 +610,11 @@ class DeRes(object):
             hasall = hasent & hasmid & hasxit
             missing = ak.count(hasall,0) - ak.count_nonzero(hasall)
             if(missing > 0):
-                print("Found",missing,"Instfances of missing intersections in",ak.count(hasall,0),"tracks")
+                print("Found",missing,"Instances of missing intersections in",ak.count(hasall,0),"tracks")
                 for itrk in range(len(hasall)):
                     if (not hasall[itrk]):
                         print("Missing intersection: ",hasent[itrk],hasmid[itrk],hasxit[itrk]," eid ",runnum[itrk],":",subrun[itrk],":",event[itrk],sep="")
-        print()
+        print("processed",nevt,"events, with ",self.HFitCon.integral(),"good")
 
 
     def PlotStraws(self):
@@ -706,18 +709,14 @@ class DeRes(object):
         for isid in range(len(self.TrackerSIDs)) :
             self.HTrkResoMom[isid].plot(areso[isid])
             # fit momentum resolution
-            binsize = self.HTrkResoMom[isid].data[1]-self.HTrkResoMom[isid].data[0]
-            amp_0 = np.sum(self.HTrkResoMom[isid].data)*binsize # initial amplitude
+            amp_0 = self.HTrkResoMom[isid].integral()*self.HTrkResoMom[isid].binWidth() # initial amplitude
             p0 = np.array([amp_0,0.0,0.2])
-            binmid = np.zeros(len(self.HTrkResoMom[isid].data))
-            binerr = np.zeros(len(self.HTrkResoMom[isid].data))
-            for ibin in range(len(self.HTrkResoMom[isid].data)):
-                binmid[ibin] = 0.5*(self.HTrkResoMom[isid].edges[ibin] + self.HTrkResoMom[isid].edges[ibin+1])
-                binerr[ibin] = max(1.0,math.sqrt(self.HTrkResoMom[isid].data[ibin]))
-            popt, pcov = curve_fit(fxn_Gauss, binmid, self.HTrkResoMom[isid].data, p0, sigma=binerr)
-
             stdev = self.HTrkResoMom[isid].RMS()
             fwhm = self.HTrkResoMom[isid].FWHM()
+            prange = self.HTrkResoMom[isid].rangeAboveValue(0.3*self.HTrkResoMom[isid].maxVal())
+            binmid,binval,binerr = self.HTrkResoMom[isid].fitArrays(prange)
+            popt, pcov = curve_fit(fxn_Gauss, binmid,binval, p0, sigma=binerr)
+
             areso[isid].plot(binmid, fxn_Gauss(binmid, *popt), 'r-',label="Fit")
             areso[isid].text(0.6, 0.9, f"$\\mu$ = {popt[1]:.3f} $\\pm$ {np.sqrt(pcov[1][1]):.3f}",transform=areso[isid].transAxes)
             areso[isid].text(0.6, 0.8, f"$\\sigma$ = {popt[2]:.3f} $\\pm$ {np.sqrt(pcov[2][2]):.3f}",transform=areso[isid].transAxes)
@@ -726,15 +725,12 @@ class DeRes(object):
 
             self.HTrkPullMom[isid].plot(apull[isid])
             # fit momentum pull
-            binsize = self.HTrkPullMom[isid].data[1]-self.HTrkPullMom[isid].data[0]
-            amp_0 = np.sum(self.HTrkPullMom[isid].data)*binsize # initial amplitude
-            p0 = np.array([amp_0,0.0,0.2])
-            binmid = np.zeros(len(self.HTrkPullMom[isid].data))
-            binerr = np.zeros(len(self.HTrkPullMom[isid].data))
-            for ibin in range(len(self.HTrkPullMom[isid].data)):
-                binmid[ibin] = 0.5*(self.HTrkPullMom[isid].edges[ibin] + self.HTrkPullMom[isid].edges[ibin+1])
-                binerr[ibin] = max(1.0,math.sqrt(self.HTrkPullMom[isid].data[ibin]))
-            popt, pcov = curve_fit(fxn_Gauss, binmid, self.HTrkPullMom[isid].data, p0, sigma=binerr)
+            amp_0 = self.HTrkPullMom[isid].integral()*self.HTrkPullMom[isid].binWidth() # initial amplitude
+            p0 = np.array([amp_0,0.0,1.0])
+
+            prange = self.HTrkPullMom[isid].rangeAboveValue(0.3*self.HTrkPullMom[isid].maxVal())
+            binmid,binval,binerr = self.HTrkPullMom[isid].fitArrays(prange)
+            popt, pcov = curve_fit(fxn_Gauss, binmid,binval, p0, sigma=binerr)
 
             stdev = self.HTrkPullMom[isid].RMS()
             fwhm = self.HTrkPullMom[isid].FWHM()
