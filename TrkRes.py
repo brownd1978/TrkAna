@@ -1,5 +1,5 @@
-
-# class to measure the resolution of high-energy electrons
+#
+# class to measure the resolution of tracks, given a reduced ntuple with fixed-index tracks
 #
 import uproot
 import awkward as ak
@@ -11,6 +11,8 @@ from scipy.optimize import curve_fit
 import math
 from scipy import special
 import SurfaceIds as SID
+import TrkDirection as TD
+import PDGCodes as PDG
 import HistUtil
 import h5py
 from scipy.stats import crystalball
@@ -30,24 +32,26 @@ def TargetFoil(tgtz):
 
 
 class DeRes(object):
-    def __init__(self,momrange,costrange,minNHits,minFitCon,minTrkQual,index=0):
+    def __init__(self,momrange,costrange,minNHits,minFitCon,minTrkQual,index=0,trkdir=TD.Downstream(),pdgcode=PDG.EMinus(),testcharge=False):
         self.MomRange = momrange
         self.CosTRange = costrange
         self.minNHits = minNHits
         self.minFitCon = minFitCon
         self.minTrkQual = minTrkQual
         self.index = index
+        self.tdir = trkdir
+        self.pdg = pdgcode
+        self.testc = testcharge
 
         nDeltaMomBins = 200
         nMomBins = 200
-        momrange=(self.MomRange[0],107)
         momresorange=(-2.5,2.5)
         momresprange=(-10,5)
         momtitle="Momentum at "
         momxlabel="Momentum (MeV)"
 
         self.TrkLoc = [None]*3
-        self.HOriginMom = HistUtil.new_hist(name="OriginMom",label="MC Origin",bins=nMomBins, range=momrange,title="Momentum at Origin",xlabel="Momentum (MeV)")
+        self.HOriginMom = HistUtil.new_hist(name="OriginMom",label="MC Origin",bins=nMomBins, range=self.momrange,title="Momentum at Origin",xlabel="Momentum (MeV)")
 
         self.HTrkFitMom = [None]*3
         self.HTrkMCMom = [None]*3
@@ -64,8 +68,8 @@ class DeRes(object):
         # momentum in tracker
         for isid in range(len(self.TrackerSIDs)):
             loc = "@"+SID.SurfaceName(self.TrackerSIDs[isid])
-            self.HTrkFitMom[isid] = HistUtil.new_hist(name=loc+"Mom",label="Fit",bins=nMomBins, range=momrange,title="Momentum"+loc,xlabel=momxlabel)
-            self.HTrkMCMom[isid] = HistUtil.new_hist(name=loc+"Mom",label="MC",bins=nMomBins, range=momrange,title="Momentum"+loc,xlabel=momxlabel)
+            self.HTrkFitMom[isid] = HistUtil.new_hist(name=loc+"Mom",label="Fit",bins=nMomBins, range=self.momrange,title="Momentum"+loc,xlabel=momxlabel)
+            self.HTrkMCMom[isid] = HistUtil.new_hist(name=loc+"Mom",label="MC",bins=nMomBins, range=self.momrange,title="Momentum"+loc,xlabel=momxlabel)
             self.HTrkResoMom[isid] = HistUtil.new_hist(name=loc+"Resolution",label="",bins=nDeltaMomBins, range=momresorange,title=momresotitle+loc,xlabel=dmomxlabel)
             self.HTrkRespMom[isid] = HistUtil.new_hist(name=loc+"Response",label="All",bins=nDeltaMomBins, range=momresprange,title=momresptitle+loc,xlabel=dmomxlabel)
             self.HTrkRefRespMom[isid] = HistUtil.new_hist(name=loc+"Response",label="NTSDA == 0",bins=nDeltaMomBins, range=momresprange,title=momresptitle+loc,xlabel=dmomxlabel)
@@ -178,7 +182,6 @@ class DeRes(object):
         self.HCosTnc = HistUtil.new_hist(name="CosT",bins=50,range=costrange,label="N$_{ST Cyl.}$>0 & N$_{OPA}$==0",title="Cos($\\Theta$)@TT_Front",xlabel="P$_{z}$/P")
 
     def Loop(self,files):
-        elPDG = 11
         ibatch = 0
         np.set_printoptions(precision=5,floatmode='fixed')
         print("Processing batch ",end=' ')
@@ -214,7 +217,7 @@ class DeRes(object):
             TrkMC = trkMC[:,self.index,0] # primary MC match of indexed track
             # basic consistency test
             assert((len(runnum) == len( Segs)) & (len(Segs) == len(SegsMC)) & (len(Segs) == len(TrkMC)) & (len(NHits) == len(Segs)))
-            goodMC = (TrkMC.pdg == elPDG) & (TrkMC.trkrel._rel == 0)
+            goodMC = PDG.Match(self.pdg,TrkMC.pdg,self.testc) & (TrkMC.trkrel._rel == 0)
             OMom = TrkMC.mom.magnitude()
             goodMC = goodMC & (OMom>self.MomRange[0]) & (OMom < self.MomRange[1])
             OMom = OMom[goodMC]
@@ -230,7 +233,7 @@ class DeRes(object):
             NHits = NHits[goodMC]
             FitCon = FitCon[goodMC]
             TrkQual = TrkQual[goodMC]
-            midsegs = Segs[(Segs.sid == SID.TT_Mid()) & (Segs.mom.z() > 0.0) ]
+            midsegs = Segs[(Segs.sid == SID.TT_Mid()) & TD.Match(self.tdir,Segs.mom.z()) ]
             CosT = ak.flatten(midsegs.mom.cosTheta())
 # not all (cosmic) tracks go through TT_Mid
             goodFit = (NHits >= self.minNHits) & (FitCon > self.minFitCon) & (TrkQual > self.minTrkQual)
@@ -240,12 +243,12 @@ class DeRes(object):
             # sample the fits at the specified
             for isid in range(len(self.TrackerSIDs)) :
                 sid = self.TrackerSIDs[isid]
-                segs = Segs[(Segs.sid == sid) & (Segs.mom.z() > 0.0) ]
+                segs = Segs[(Segs.sid == sid) & TD.Match(self.tdir,Segs.mom.z()) ]
                 assert(len(segs) == len(Segs))
                 mom = segs.mom.magnitude()
                 mom = mom[(mom > self.MomRange[0]) & (mom < self.MomRange[1])]
                 hasmom = ak.count_nonzero(mom,axis=1)==1
-                segsMC = SegsMC[(SegsMC.sid == sid) & (SegsMC.mom.z() > 0.0) ]
+                segsMC = SegsMC[(SegsMC.sid == sid) & TD.Match(self.tdir,SegsMC.mom.z()) ]
                 momMC = segsMC.mom.magnitude()
                 hasMC = ak.count_nonzero(momMC,axis=1)==1
                 good = hasMC & goodFit & hasmom
@@ -425,9 +428,9 @@ class DeRes(object):
             self.HCosTcc.fill(np.array(ak.flatten(ccfsegs.mom.cosTheta())))
 
             # test for missing intersections
-            hasent = (Segs.sid == 0) & (Segs.mom.z() > 0.0)
-            hasmid = (Segs.sid == 1) & (Segs.mom.z() > 0.0)
-            hasxit = (Segs.sid == 2) & (Segs.mom.z() > 0.0)
+            hasent = (Segs.sid == 0) & TD.Match(self.tdir,Segs.mom.z())
+            hasmid = (Segs.sid == 1) & TD.Match(self.tdir,Segs.mom.z())
+            hasxit = (Segs.sid == 2) & TD.Match(self.tdir,Segs.mom.z())
             hasent = ak.any(hasent,axis=1)
             hasmid = ak.any(hasmid,axis=1)
             hasxit = ak.any(hasxit,axis=1)
