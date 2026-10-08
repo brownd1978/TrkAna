@@ -9,15 +9,15 @@ def MuPlus():
     return -13
 
 def Match(pdgcode1,pdgcode2,testcharge):
-    if ! testcharge:
+    if not testcharge:
         return abs(pdgcode1) == abs(pdgcode2)
-    else
+    else:
         return pdgcode1 == pdgcode2
 
 def isElectron(pdgcode):
-    return abs(pdgcode) = 11
+    return abs(pdgcode) == 11
 def isMuon(pdgcode):
-    return abs(pdgcode) = 13
+    return abs(pdgcode) == 13
 def isEMinus(pdgcode):
     return pdgcode == 11
 def isEPlus(pdgcode):
@@ -27,7 +27,7 @@ def isMuMinus(pdgcode):
 def isMuPlus(pdgcode):
     return pdgcode == -13
 
-def PDGName(pdgcode,bool usecharge=True):
+def PDGName(pdgcode,usecharge=True):
     if usecharge:
         match pdgcode:
             case 11:
@@ -40,8 +40,8 @@ def PDGName(pdgcode,bool usecharge=True):
                 return "MuPlus"
     else:
         match pdgcode:
-            case 11 | case -11:
+            case 11 | -11:
                 return "Electron"
-            case 13 | case -13:
+            case 13 | -13:
                 return "Muon"
     return "Unknown"

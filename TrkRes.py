@@ -31,7 +31,7 @@ def TargetFoil(tgtz):
     return itgt
 
 
-class DeRes(object):
+class TrkRes(object):
     def __init__(self,momrange,costrange,minNHits,minFitCon,minTrkQual,index=0,trkdir=TD.Downstream(),pdgcode=PDG.EMinus(),testcharge=False):
         self.MomRange = momrange
         self.CosTRange = costrange
@@ -51,7 +51,7 @@ class DeRes(object):
         momxlabel="Momentum (MeV)"
 
         self.TrkLoc = [None]*3
-        self.HOriginMom = HistUtil.new_hist(name="OriginMom",label="MC Origin",bins=nMomBins, range=self.momrange,title="Momentum at Origin",xlabel="Momentum (MeV)")
+        self.HOriginMom = HistUtil.new_hist(name="OriginMom",label="MC Origin",bins=nMomBins, range=self.MomRange,title="Momentum at Origin",xlabel="Momentum (MeV)")
 
         self.HTrkFitMom = [None]*3
         self.HTrkMCMom = [None]*3
@@ -68,8 +68,8 @@ class DeRes(object):
         # momentum in tracker
         for isid in range(len(self.TrackerSIDs)):
             loc = "@"+SID.SurfaceName(self.TrackerSIDs[isid])
-            self.HTrkFitMom[isid] = HistUtil.new_hist(name=loc+"Mom",label="Fit",bins=nMomBins, range=self.momrange,title="Momentum"+loc,xlabel=momxlabel)
-            self.HTrkMCMom[isid] = HistUtil.new_hist(name=loc+"Mom",label="MC",bins=nMomBins, range=self.momrange,title="Momentum"+loc,xlabel=momxlabel)
+            self.HTrkFitMom[isid] = HistUtil.new_hist(name=loc+"Mom",label="Fit",bins=nMomBins, range=self.MomRange,title="Momentum"+loc,xlabel=momxlabel)
+            self.HTrkMCMom[isid] = HistUtil.new_hist(name=loc+"Mom",label="MC",bins=nMomBins, range=self.MomRange,title="Momentum"+loc,xlabel=momxlabel)
             self.HTrkResoMom[isid] = HistUtil.new_hist(name=loc+"Resolution",label="",bins=nDeltaMomBins, range=momresorange,title=momresotitle+loc,xlabel=dmomxlabel)
             self.HTrkRespMom[isid] = HistUtil.new_hist(name=loc+"Response",label="All",bins=nDeltaMomBins, range=momresprange,title=momresptitle+loc,xlabel=dmomxlabel)
             self.HTrkRefRespMom[isid] = HistUtil.new_hist(name=loc+"Response",label="NTSDA == 0",bins=nDeltaMomBins, range=momresprange,title=momresptitle+loc,xlabel=dmomxlabel)
@@ -185,7 +185,7 @@ class DeRes(object):
         ibatch = 0
         np.set_printoptions(precision=5,floatmode='fixed')
         print("Processing batch ",end=' ')
-        for batch,rep in uproot.iterate(files,filter_name="/evtinfo|trk|trksegs|trkmcsim|trksegsmc|trkqual|trksegpars_lh/i",report=True):
+        for batch,rep in uproot.iterate(files,filter_name="/evtinfo|trk.trk|trksegs|trkmcsim|trksegsmc|trkqual|trksegpars_lh/i",report=True):
             print(ibatch,end=' ')
             ibatch = ibatch+1
             runnum = batch['run']
@@ -195,6 +195,7 @@ class DeRes(object):
             lhpars = batch['trksegpars_lh'] # track fit samples
             nhits = batch['trk.nactive']  # track N hits
             fitcon = batch['trk.fitcon']  # track fit consistency
+            fpdg = batch['trk.pdg'] # track fit PDG
             trkQual = batch['trkqual.result']  # track fit quality
             trkMC = batch['trkmcsim']  # MC genealogy of particles
             segsMC = batch['trksegsmc'] # SurfaceStep infor for true primary particle
@@ -205,19 +206,17 @@ class DeRes(object):
 #            print("Segs len",len(Segs),"lhpars len",len(lhpars))
             FitCon = fitcon[:,self.index]
             NHits = nhits[:,self.index]
+            FPDG = fpdg[:,self.index]
+
             TrkQual = trkQual[:,self.index]
             assert(len(Segs)==len(NHits))
-
-            self.HTrkQual.fill(np.array(TrkQual))
-            self.HFitCon.fill(np.array(FitCon))
-            self.HNHits.fill(np.array(NHits))
 
             # define good MC selection first, to allow downstfream comparisons
             SegsMC = segsMC[:,self.index] # segments (of 1st MC match) of indexed track
             TrkMC = trkMC[:,self.index,0] # primary MC match of indexed track
             # basic consistency test
             assert((len(runnum) == len( Segs)) & (len(Segs) == len(SegsMC)) & (len(Segs) == len(TrkMC)) & (len(NHits) == len(Segs)))
-            goodMC = PDG.Match(self.pdg,TrkMC.pdg,self.testc) & (TrkMC.trkrel._rel == 0)
+            goodMC = PDG.Match(self.pdg,TrkMC.pdg,self.testc)
             OMom = TrkMC.mom.magnitude()
             goodMC = goodMC & (OMom>self.MomRange[0]) & (OMom < self.MomRange[1])
             OMom = OMom[goodMC]
@@ -226,21 +225,29 @@ class DeRes(object):
             self.HOriginCosT.fill(np.array(TrkMC[goodMC].mom.cosTheta()))
             self.HOriginFoil.fill(np.array(list(map(TargetFoil,TrkMC[goodMC].pos.z()))))
 
+            goodFit = PDG.Match(self.pdg,FPDG,self.testc)
             # truncate accordingly
-            SegsMC = SegsMC[goodMC]
-            Segs = Segs[goodMC]
-            lhpars = lhpars[goodMC]
-            NHits = NHits[goodMC]
-            FitCon = FitCon[goodMC]
-            TrkQual = TrkQual[goodMC]
+            SegsMC = SegsMC[goodMC & goodFit]
+            Segs = Segs[goodMC & goodFit]
+            lhpars = lhpars[goodMC & goodFit]
+            NHits = NHits[goodMC & goodFit]
+            FitCon = FitCon[goodMC & goodFit]
+            TrkQual = TrkQual[goodMC & goodFit]
             midsegs = Segs[(Segs.sid == SID.TT_Mid()) & TD.Match(self.tdir,Segs.mom.z()) ]
-            CosT = ak.flatten(midsegs.mom.cosTheta())
+
 # not all (cosmic) tracks go through TT_Mid
-            goodFit = (NHits >= self.minNHits) & (FitCon > self.minFitCon) & (TrkQual > self.minTrkQual)
+            goodFit = ak.num(midsegs) > 0
+
+            self.HTrkQual.fill(np.array(TrkQual[goodFit]))
+            self.HFitCon.fill(np.array(FitCon[goodFit]))
+            self.HNHits.fill(np.array(NHits[goodFit]))
+
+            goodFit = (NHits >= self.minNHits) & (FitCon > self.minFitCon) & (TrkQual > self.minTrkQual) & ak.num(midsegs) > 0
+
             TSDASeg = Segs[Segs.sid == SID.TSDA() ]
             noTSDA = ak.num(TSDASeg)==0
 
-            # sample the fits at the specified
+            # sample the fits at the specified surface
             for isid in range(len(self.TrackerSIDs)) :
                 sid = self.TrackerSIDs[isid]
                 segs = Segs[(Segs.sid == sid) & TD.Match(self.tdir,Segs.mom.z()) ]
